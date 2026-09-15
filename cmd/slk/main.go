@@ -1236,7 +1236,6 @@ func run() error {
 
 	// Declare p before wiring callbacks so closures can capture it
 	var p *tea.Program
-	var activeTeamID string
 
 	// router holds the program-wide active workspace pointer. All
 	// wireCallbacks-registered callbacks read router.Active() at
@@ -1284,20 +1283,26 @@ func run() error {
 	saveTheme := func(name string, scope themeswitcher.ThemeScope) {
 		switch scope {
 		case themeswitcher.ScopeWorkspace:
-			if activeTeamID == "" {
+			active := router.Active()
+			if active == nil {
 				return // shouldn't happen, but guard against it
 			}
-			teamName := activeTeamID
-			if wctx := router.ByID(activeTeamID); wctx != nil && wctx.TeamName != "" {
-				teamName = wctx.TeamName
+			teamID := active.TeamID
+			teamName := teamID
+			if active.TeamName != "" {
+				teamName = active.TeamName
 			}
+			// workspacesMu also guards against a connect goroutine's
+			// snapshotWorkspaces call racing this read-modify-write of
+			// cfg.Workspaces -- see workspace_config_snapshot.go.
+			workspacesMu.Lock()
 			// Find the existing TOML key for this workspace, if any.
 			// If no block exists yet we use the team ID as the key
 			// (legacy default); a future --add-workspace may have
 			// already written a slug-keyed block.
-			tomlKey := activeTeamID
+			tomlKey := teamID
 			for k, w := range cfg.Workspaces {
-				if w.TeamID == activeTeamID {
+				if w.TeamID == teamID {
 					tomlKey = k
 					break
 				}
@@ -1307,11 +1312,12 @@ func run() error {
 				cfg.Workspaces = make(map[string]config.Workspace)
 			}
 			ws := cfg.Workspaces[tomlKey]
-			ws.TeamID = activeTeamID
+			ws.TeamID = teamID
 			ws.Theme = name
 			cfg.Workspaces[tomlKey] = ws
+			workspacesMu.Unlock()
 			// Persist.
-			if err := saveWorkspaceTheme(configPath, tomlKey, activeTeamID, teamName, name); err != nil {
+			if err := saveWorkspaceTheme(configPath, tomlKey, teamID, teamName, name); err != nil {
 				log.Printf("save workspace theme: %v", err)
 			}
 		case themeswitcher.ScopeGlobal:
@@ -1324,16 +1330,19 @@ func run() error {
 
 	// Wire sidebar width saver: always persist to the active workspace.
 	saveSidebarWidth := func(width int) {
-		if activeTeamID == "" {
+		active := router.Active()
+		if active == nil {
 			return
 		}
-		teamName := activeTeamID
-		if wctx := router.ByID(activeTeamID); wctx != nil && wctx.TeamName != "" {
-			teamName = wctx.TeamName
+		teamID := active.TeamID
+		teamName := teamID
+		if active.TeamName != "" {
+			teamName = active.TeamName
 		}
-		tomlKey := activeTeamID
+		workspacesMu.Lock()
+		tomlKey := teamID
 		for k, w := range cfg.Workspaces {
-			if w.TeamID == activeTeamID {
+			if w.TeamID == teamID {
 				tomlKey = k
 				break
 			}
@@ -1342,20 +1351,21 @@ func run() error {
 			cfg.Workspaces = make(map[string]config.Workspace)
 		}
 		ws := cfg.Workspaces[tomlKey]
-		ws.TeamID = activeTeamID
+		ws.TeamID = teamID
 		ws.SidebarWidth = width
 		cfg.Workspaces[tomlKey] = ws
-		if err := saveWorkspaceWidth(configPath, tomlKey, activeTeamID, teamName, width); err != nil {
+		workspacesMu.Unlock()
+		if err := saveWorkspaceWidth(configPath, tomlKey, teamID, teamName, width); err != nil {
 			log.Printf("save workspace sidebar width: %v", err)
 		}
 	}
 	app.SetSettingsService(core.NewSettingsService(saveTheme, saveSidebarWidth))
 
-	// Wire presence/DND status setter. Resolves activeTeamID through
-	// the router at invocation so the closure always targets the
-	// currently-active workspace context.
+	// Wire presence/DND status setter. Resolves the active workspace
+	// through the router at invocation so the closure always targets
+	// the currently-active workspace context.
 	setStatus := func(action presencemenu.Action, snoozeMinutes int) {
-		wctx := router.ByID(activeTeamID)
+		wctx := router.Active()
 		if wctx == nil || wctx.Client == nil {
 			return
 		}
@@ -2010,7 +2020,6 @@ func run() error {
 
 		// Update active pointer; callbacks read router.Active() at
 		// invocation time, so no closure rebinding is needed.
-		activeTeamID = teamID
 		router.Set(wctx)
 
 		// Build external-user set from cached records so the mention
@@ -2068,8 +2077,8 @@ func run() error {
 	// firstReady gates the "first workspace to connect wins" logic when
 	// no default_workspace is configured. sync.Once ensures exactly one
 	// connect goroutine claims the initial active slot, eliminating the
-	// race where two simultaneous WorkspaceReadyMsgs both observed
-	// activeTeamID == "" and both set InitialActive=true.
+	// race where two simultaneous WorkspaceReadyMsgs both observed no
+	// active workspace yet and both set InitialActive=true.
 	var firstReady sync.Once
 
 	// Start the TUI immediately (shows loading overlay). All output —
@@ -2107,7 +2116,13 @@ func run() error {
 	// Results are sent to the TUI via p.Send()
 	for _, ot := range orderedTokens {
 		go func(tok slackclient.Token) {
-			wctx, err := connectWorkspace(ctx, tok, db, cfg, avatarCache, p, configPath)
+			// Independent copy of cfg.Workspaces: this goroutine reads
+			// it (via connectWorkspace and, below, rtmEventHandler)
+			// concurrently with saveTheme/saveSidebarWidth mutating
+			// the original in place from the Update goroutine. See
+			// snapshotWorkspaces's doc comment.
+			cfgSnap := snapshotWorkspaces(cfg)
+			wctx, err := connectWorkspace(ctx, tok, db, cfgSnap, avatarCache, p, configPath)
 			if err != nil {
 				// Log it. WorkspaceFailedMsg carries only the team
 				// name, so without this the reason never reaches the
@@ -2138,14 +2153,12 @@ func run() error {
 				if wctx.TeamID == defaultTeamID {
 					isInitial = true
 					router.Set(wctx)
-					activeTeamID = wctx.TeamID
 				}
 				// else: not the configured default; never claim.
 			} else {
 				firstReady.Do(func() {
 					isInitial = true
 					router.Set(wctx)
-					activeTeamID = wctx.TeamID
 				})
 			}
 
@@ -2165,15 +2178,15 @@ func run() error {
 				tsFormat:        tsFormat,
 				db:              db,
 				workspaceID:     teamID,
-				isActive:        func() bool { return teamID == activeTeamID },
+				isActive:        func() bool { a := router.Active(); return a != nil && a.TeamID == teamID },
 				notifier:        notifier,
-				notifyCfg:       cfg.Notifications,
+				notifyCfg:       cfgSnap.Notifications,
 				currentUserID:   wctx.UserID,
 				channelNames:    channelNames,
 				channelTypes:    channelTypes,
 				workspaceName:   wctx.TeamName,
 				activeChannelID: func() string { return app.ActiveChannelID() },
-				cfg:             cfg,
+				cfg:             cfgSnap,
 				wsCtx:           wctx,
 				backfillGate:    dedupeGate{window: 30 * time.Second},
 				// The reconnect refresh, deliberately NOT the
@@ -2222,8 +2235,8 @@ func run() error {
 				TeamID:           wctx.TeamID,
 				TeamName:         wctx.TeamName,
 				Domain:           wctx.Client.TeamSubdomain(),
-				Theme:            cfg.ResolveTheme(wctx.TeamID),
-				SidebarWidth:     cfg.ResolveWidth(wctx.TeamID),
+				Theme:            cfgSnap.ResolveTheme(wctx.TeamID),
+				SidebarWidth:     cfgSnap.ResolveWidth(wctx.TeamID),
 				Channels:         wctx.Channels,
 				FinderItems:      wctx.FinderItems,
 				UserNames:        wctx.UserNames,
