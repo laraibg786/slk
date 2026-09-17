@@ -16,20 +16,59 @@ const (
 	chrome = 4
 )
 
-// View renders the prompt box, or "" when hidden.
-func (m Model) View() string {
+// renderKey is every input to View except the styles, which SetStyles
+// invalidates instead. The key map is carried as help fields rather than the
+// built footer so a cache hit allocates nothing.
+type renderKey struct {
+	width       int
+	title       string
+	body        string
+	confirmKey  string
+	confirmDesc string
+	cancelKey   string
+	cancelDesc  string
+}
+
+func (m Model) key(width int) renderKey {
+	confirm, cancel := m.KeyMap.Confirm.Help(), m.KeyMap.Cancel.Help()
+	return renderKey{
+		width:       width,
+		title:       m.title,
+		body:        m.body,
+		confirmKey:  confirm.Key,
+		confirmDesc: confirm.Desc,
+		cancelKey:   cancel.Key,
+		cancelDesc:  cancel.Desc,
+	}
+}
+
+func (k renderKey) footer() string {
+	return "[" + k.confirmKey + "] " + k.confirmDesc + "   [" + k.cancelKey + "] " + k.cancelDesc
+}
+
+// View renders the prompt box, or "" when hidden. Consecutive frames with
+// unchanged inputs are served from cache: the prompt is static while open, and
+// rendering the box costs three orders of magnitude more than the comparison.
+func (m *Model) View() string {
 	if !m.visible {
 		return ""
 	}
 
 	width := boxWidth(m.width)
+	key := m.key(width)
+	if m.cache != "" && key == m.cacheKey {
+		return m.cache
+	}
+
 	content := strings.Join([]string{
 		m.styles.Title.Render(m.title),
 		m.styles.Body.Render("> " + preview(m.body, width-chrome)),
-		m.styles.Footer.Render(m.footer()),
+		m.styles.Footer.Render(key.footer()),
 	}, "\n\n")
 
-	return m.styles.Box.Width(width).Render(reassertBase(content, m.styles.BaseANSI))
+	m.cache = m.styles.Box.Width(width).Render(reassertBase(content, m.styles.BaseANSI))
+	m.cacheKey = key
+	return m.cache
 }
 
 func boxWidth(termWidth int) int {
@@ -44,11 +83,6 @@ func preview(body string, limit int) string {
 		return truncate.StringWithTail(body, uint(limit), "…")
 	}
 	return body
-}
-
-func (m Model) footer() string {
-	confirm, cancel := m.KeyMap.Confirm.Help(), m.KeyMap.Cancel.Help()
-	return "[" + confirm.Key + "] " + confirm.Desc + "   [" + cancel.Key + "] " + cancel.Desc
 }
 
 // reassertBase re-emits style after each SGR reset. lipgloss v2 emits the short

@@ -20,6 +20,9 @@ type Model struct {
 	title     string
 	body      string
 	onConfirm ConfirmFunc
+
+	cache    string
+	cacheKey renderKey
 }
 
 // Option configures a Model at construction.
@@ -73,8 +76,12 @@ func (m *Model) SetWidth(width int) { m.width = width }
 // Styles returns the prompt's current styles.
 func (m Model) Styles() Styles { return m.styles }
 
-// SetStyles replaces the prompt's styles.
-func (m *Model) SetStyles(s Styles) { m.styles = s }
+// SetStyles replaces the prompt's styles. Styles are not part of the render
+// key, so this is what drops the cached frame.
+func (m *Model) SetStyles(s Styles) {
+	m.styles = s
+	m.cache, m.cacheKey = "", renderKey{}
+}
 
 // Init does nothing; the prompt has no startup work.
 func (m Model) Init() tea.Cmd { return nil }

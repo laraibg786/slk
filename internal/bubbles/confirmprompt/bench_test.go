@@ -1,14 +1,17 @@
-// Update runs per keystroke, View once per frame while the prompt is open.
-// Both report allocations so a later change to either path is visible.
+// Update runs per keystroke and View once per frame while the prompt is
+// open. Both report allocations so the cost of moving or changing either
+// path is visible.
 //
-// View holds no render cache, so every frame pays a full render: lipgloss
-// measuring and padding a bordered box, unchanged from the pre-move
+// View is measured warm and cold. Warm is the steady state: the prompt is
+// static while open, so every frame after the first is a cache hit. Cold is
+// what a resize or re-Open costs, and is unchanged from the pre-move
 // implementation at 053d2a2.
 //
-// Update is slower than the string switch it replaced -- key.Matches formats
-// the key name, where the caller used to pass a normalised string. One call
-// per keystroke, so not worth optimising; noted so the ratio is not read as a
-// defect.
+// Key handling is slower in relative terms than the string switch it
+// replaced: key.Matches formats the key name, where the caller used to
+// pass an already-normalised string. At one call per keystroke that is
+// not worth optimising, and it is noted here so the ratio is not read as
+// a defect.
 package confirmprompt
 
 import (
@@ -18,7 +21,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// themedStyles mirrors what a themed host pushes in, BaseANSI included.
+// themedStyles mirrors what a host with a theme pushes in, including the
+// BaseANSI fixup, which the defaults leave empty.
 func themedStyles() Styles {
 	s := DefaultStyles(true)
 	s.BaseANSI = "\x1b[48;2;26;26;46m\x1b[38;2;224;224;224m"
@@ -33,8 +37,10 @@ func benchModel(body string) Model {
 
 const benchBody = "the quick brown fox jumps over the lazy dog"
 
+// The steady state: repeat frames while the prompt sits open.
 func BenchmarkView(b *testing.B) {
 	m := benchModel(benchBody)
+	_ = m.View()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -43,25 +49,45 @@ func BenchmarkView(b *testing.B) {
 	}
 }
 
-// Truncation adds a width measurement and a re-slice.
-func BenchmarkViewTruncatedBody(b *testing.B) {
-	m := benchModel(strings.Repeat("überlange nachricht ", 40))
+// Alternating the body misses the single-entry cache every call. Alternating
+// the width would not: the box width is a clamped percentage, so nearby
+// terminal widths collapse to the same key.
+func BenchmarkViewUncached(b *testing.B) {
+	m := benchModel(benchBody)
+	bodies := [2]string{benchBody, benchBody + "!"}
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i := range b.N {
+		m.Open("Delete message?", bodies[i%2], nil)
+		_ = m.View()
+	}
+}
+
+// The truncation path adds a display-width measurement and a re-slice
+// over a body that does not fit the box.
+func BenchmarkViewUncachedTruncatedBody(b *testing.B) {
+	long := strings.Repeat("überlange nachricht ", 40)
+	m := benchModel(long)
+	bodies := [2]string{long, long + "!"}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		m.Open("Delete message?", bodies[i%2], nil)
 		_ = m.View()
 	}
 }
 
 // Empty BaseANSI skips the reset fixup, isolating what it costs.
-func BenchmarkViewWithoutBaseANSI(b *testing.B) {
+func BenchmarkViewUncachedWithoutBaseANSI(b *testing.B) {
 	m := New(WithWidth(120))
-	m.Open("Delete message?", benchBody, nil)
+	bodies := [2]string{benchBody, benchBody + "!"}
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i := range b.N {
+		m.Open("Delete message?", bodies[i%2], nil)
 		_ = m.View()
 	}
 }
@@ -79,7 +105,8 @@ func BenchmarkUpdateConfirm(b *testing.B) {
 	}
 }
 
-// Cancel is the path every non-confirm key takes.
+// The cancel path is what an unbound key takes, and is the common
+// outcome for every key that is not a confirm.
 func BenchmarkUpdateCancel(b *testing.B) {
 	base := benchModel(benchBody)
 	press := tea.KeyPressMsg{Code: tea.KeyEscape}
