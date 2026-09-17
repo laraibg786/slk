@@ -1,7 +1,7 @@
 // Package confirmprompt provides a centered yes/no confirmation overlay
 // for destructive actions.
 //
-// The model owns its size and renders only its own box; compositing it
+// The model owns its width and renders only its own box; compositing it
 // over a backdrop is the caller's job.
 package confirmprompt
 
@@ -10,22 +10,38 @@ import tea "charm.land/bubbletea/v2"
 // Model is the confirmation overlay.
 type Model struct {
 	KeyMap KeyMap
-	Styles Styles
 
+	styles    Styles
 	width     int
-	height    int
 	visible   bool
 	title     string
 	body      string
 	onConfirm func() tea.Msg
 }
 
+// Option configures a Model at construction. Anything that also changes
+// at runtime has a setter as well.
+type Option func(*Model)
+
+// WithStyles sets the prompt's styles.
+func WithStyles(s Styles) Option { return func(m *Model) { m.styles = s } }
+
+// WithKeyMap sets the prompt's key bindings.
+func WithKeyMap(k KeyMap) Option { return func(m *Model) { m.KeyMap = k } }
+
+// WithWidth sets the terminal width the box is sized against.
+func WithWidth(width int) Option { return func(m *Model) { m.width = width } }
+
 // New returns a hidden prompt with default keys and styles.
-func New() Model {
-	return Model{
+func New(opts ...Option) Model {
+	m := Model{
 		KeyMap: DefaultKeyMap(),
-		Styles: DefaultStyles(true),
+		styles: DefaultStyles(true),
 	}
+	for _, opt := range opts {
+		opt(&m)
+	}
+	return m
 }
 
 // Open shows the prompt. body is rendered as a single-line preview of the
@@ -49,11 +65,16 @@ func (m *Model) Close() {
 // IsVisible reports whether the prompt is showing.
 func (m Model) IsVisible() bool { return m.visible }
 
-// SetSize records the terminal dimensions the box is sized against.
-func (m *Model) SetSize(width, height int) {
-	m.width = width
-	m.height = height
-}
+// SetWidth records the terminal width the box is sized against. The box
+// height follows its content, and centering it is the caller's job, so
+// the terminal height is not the model's business.
+func (m *Model) SetWidth(width int) { m.width = width }
+
+// Styles returns the prompt's current styles.
+func (m Model) Styles() Styles { return m.styles }
+
+// SetStyles replaces the prompt's styles.
+func (m *Model) SetStyles(s Styles) { m.styles = s }
 
 // Init implements tea.Model. The prompt has no startup work.
 func (m Model) Init() tea.Cmd { return nil }
