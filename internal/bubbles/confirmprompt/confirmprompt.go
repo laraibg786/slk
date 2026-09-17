@@ -1,7 +1,7 @@
 // Package confirmprompt provides a centered yes/no confirmation overlay
 // for destructive actions.
 //
-// The model owns its width and renders only its own box; compositing it
+// The model owns its size and renders only its own box; compositing it
 // over a backdrop is the caller's job.
 package confirmprompt
 
@@ -17,6 +17,9 @@ type Model struct {
 	title     string
 	body      string
 	onConfirm func() tea.Msg
+
+	cache    string
+	cacheKey renderKey
 }
 
 // Option configures a Model at construction. Anything that also changes
@@ -73,8 +76,12 @@ func (m *Model) SetWidth(width int) { m.width = width }
 // Styles returns the prompt's current styles.
 func (m Model) Styles() Styles { return m.styles }
 
-// SetStyles replaces the prompt's styles.
-func (m *Model) SetStyles(s Styles) { m.styles = s }
+// SetStyles replaces the prompt's styles. Styles are not part of the
+// render key, so this is what drops the cached frame.
+func (m *Model) SetStyles(s Styles) {
+	m.styles = s
+	m.cache, m.cacheKey = "", renderKey{}
+}
 
 // Init implements tea.Model. The prompt has no startup work.
 func (m Model) Init() tea.Cmd { return nil }

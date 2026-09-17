@@ -17,11 +17,11 @@ func shifted(r rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: r, Text: strings.ToUpper(string(r)), Mod: tea.ModShift}
 }
 
-func opened(t *testing.T, onConfirm func() tea.Msg) Model {
+func opened(t *testing.T, onConfirm func() tea.Msg) *Model {
 	t.Helper()
 	m := New(WithWidth(80))
 	m.Open("Delete message?", "hello world", onConfirm)
-	return m
+	return &m
 }
 
 func TestOpenClose(t *testing.T) {
@@ -108,7 +108,8 @@ func TestUpdateHonorsCustomKeyMap(t *testing.T) {
 }
 
 func TestViewHiddenIsEmpty(t *testing.T) {
-	if New().View() != "" {
+	m := New()
+	if m.View() != "" {
 		t.Error("hidden prompt should render nothing")
 	}
 }
@@ -211,6 +212,46 @@ func TestUpdateIgnoresModifiersOnSpecialKeys(t *testing.T) {
 	if _, cmd := opened(t, func() tea.Msg { return sentinelMsg{} }).
 		Update(tea.KeyPressMsg{Code: 'z', Text: "z", Mod: tea.ModCtrl}); cmd != nil {
 		t.Error("ctrl+z should cancel, not confirm")
+	}
+}
+
+func TestViewCachesRepeatFrames(t *testing.T) {
+	m := opened(t, nil)
+	first := m.View()
+	if m.cache == "" {
+		t.Fatal("first View should populate the cache")
+	}
+	if got := m.View(); got != first {
+		t.Error("cached frame differs from the first render")
+	}
+}
+
+func TestViewCacheInvalidation(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Model)
+	}{
+		{"SetWidth", func(m *Model) { m.SetWidth(200) }},
+		{"Open with new body", func(m *Model) { m.Open("Delete message?", "different body", nil) }},
+		{"Open with new title", func(m *Model) { m.Open("Quit slk?", "hello world", nil) }},
+		{"SetStyles", func(m *Model) {
+			s := m.Styles()
+			s.Title = s.Title.Underline(true)
+			m.SetStyles(s)
+		}},
+		{"KeyMap", func(m *Model) {
+			m.KeyMap.Confirm = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete"))
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := opened(t, nil)
+			before := m.View()
+			tc.mutate(m)
+			if after := m.View(); after == before {
+				t.Errorf("%s did not invalidate the cached frame", tc.name)
+			}
+		})
 	}
 }
 

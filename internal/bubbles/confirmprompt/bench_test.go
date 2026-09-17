@@ -2,11 +2,11 @@
 // open. Both report allocations so the cost of moving or changing either
 // path is visible.
 //
-// View holds no render cache, so every frame the prompt is open pays a
-// full render. That cost is lipgloss measuring and padding a bordered
-// box -- profiling attributes the bulk of it to Style.Render and to
-// ANSI-aware width measurement -- and it is unchanged from the pre-move
-// implementation at 053d2a2.
+// View is measured warm and cold. Warm is the steady state: the prompt
+// is static while open, so every frame after the first is a cache hit.
+// Cold is what a resize or a re-Open costs, and is dominated by lipgloss
+// measuring and padding a bordered box -- not by anything this package
+// does. Cold is unchanged from the pre-move implementation at 053d2a2.
 //
 // Key handling is slower in relative terms than the string switch it
 // replaced: key.Matches formats the key name, where the caller used to
@@ -38,8 +38,10 @@ func benchModel(body string) Model {
 
 const benchBody = "the quick brown fox jumps over the lazy dog"
 
+// The steady state: repeat frames while the prompt sits open.
 func BenchmarkView(b *testing.B) {
 	m := benchModel(benchBody)
+	_ = m.View()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -48,14 +50,33 @@ func BenchmarkView(b *testing.B) {
 	}
 }
 
-// The truncation path adds a display-width measurement and a re-slice
-// over a body that does not fit the box.
-func BenchmarkViewTruncatedBody(b *testing.B) {
-	m := benchModel(strings.Repeat("überlange nachricht ", 40))
+// Alternating the body misses the single-entry cache every call, so this
+// is the full render cost. Note that alternating the WIDTH does not: the
+// box width is a clamped percentage, so nearby terminal widths collapse
+// to the same render key.
+func BenchmarkViewUncached(b *testing.B) {
+	m := benchModel(benchBody)
+	bodies := [2]string{benchBody, benchBody + "!"}
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i := range b.N {
+		m.Open("Delete message?", bodies[i%2], nil)
+		_ = m.View()
+	}
+}
+
+// The truncation path adds a display-width measurement and a re-slice
+// over a body that does not fit the box.
+func BenchmarkViewUncachedTruncatedBody(b *testing.B) {
+	long := strings.Repeat("überlange nachricht ", 40)
+	m := benchModel(long)
+	bodies := [2]string{long, long + "!"}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		m.Open("Delete message?", bodies[i%2], nil)
 		_ = m.View()
 	}
 }
@@ -63,13 +84,14 @@ func BenchmarkViewTruncatedBody(b *testing.B) {
 // BaseANSI empty skips the reset fixup, which inflates the content the
 // outer Render then has to measure. Isolates what the host's theme
 // wiring costs.
-func BenchmarkViewWithoutBaseANSI(b *testing.B) {
+func BenchmarkViewUncachedWithoutBaseANSI(b *testing.B) {
 	m := New(WithWidth(120))
-	m.Open("Delete message?", benchBody, nil)
+	bodies := [2]string{benchBody, benchBody + "!"}
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i := range b.N {
+		m.Open("Delete message?", bodies[i%2], nil)
 		_ = m.View()
 	}
 }
