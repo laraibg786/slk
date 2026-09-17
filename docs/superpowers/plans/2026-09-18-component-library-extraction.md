@@ -383,6 +383,7 @@ goldens byte-identical unless stated.
 |---|---|---|
 | 0.1 | `internal/ui/component_boundary_test.go`, modelled on the existing `boundary_test.go` AST walk. Four checks, each with a skip-list populated to today's state so it passes immediately: (a) no component imports a sibling component; (b) no component imports app infra (`debuglog`, `core`); (c) no component reads `styles.*`; (d) no `func(any)`/`func(tea.Msg)` struct fields. | ~250 lines, test-only |
 | 0.2 | Per-component golden harness. Today's 8 goldens are all App-level, so a component-only change can only be verified through the whole app. A `golden_test.go` per component (fixed size, pinned theme/clock, reusing `newGoldenApp`'s nondeterminism pinning) makes every later PR self-verifying. | ~300 lines, test-only |
+| 0.3 | Per-component `bench_test.go` covering `Update` and `View` with `b.ReportAllocs()`, and a recorded pre-move baseline. These run per keystroke and per frame respectively, and a component extraction changes what they allocate — measure before moving, not after a regression report. See `internal/bubbles/confirmprompt/bench_test.go` for the shape. | ~60 lines per component |
 
 **Why first:** 0.2 is what lets Stages 2–5 be one-component-per-PR with local
 proof. Without it every PR's blast radius is the whole app.
@@ -558,6 +559,7 @@ stage that discharges it:
 | No component imports `debuglog`/`core` | Stages 2, 3 |
 | No component reads `styles.*` | Stage 5 |
 | No `func(any)`/`func(tea.Msg)` struct field | Stage 2.1 |
+| `Update` and `View` carry an allocation-reporting benchmark | Stage 0.3, then per component |
 | `View` takes no geometry parameter | Stage 6.1 |
 | Every modal satisfies `Overlay` (compile-time assertion) | Stage 6.4 |
 | No component package imports `pkg/chatui/internal/...` from outside the library | Go enforces |
@@ -604,7 +606,7 @@ Plus the guide's §10 checklist as the review checklist for any PR touching
 
 | Stage | Scope | PRs | Prereqs | Risk | Status |
 |---|---|---|---|---|---|
-| 0 | Guardrails | 2 | — | none | not started |
+| 0 | Guardrails | 3 | — | none | 0.3 shape landed (confirmprompt) |
 | 1 | Move already-portable packages | 3 | 0.1 | none | not started |
 | 2 | Evict app infra (`Notifier`, logger) | 4 | 0.1 | low | not started |
 | 3 | Neutral data types (aliases) | ~9 | 0.1 | low | not started |
