@@ -10,21 +10,24 @@ import tea "charm.land/bubbletea/v2"
 // Model is the confirmation overlay.
 type Model struct {
 	KeyMap KeyMap
-	Styles Styles
 
+	styles    Styles
 	width     int
 	height    int
 	visible   bool
 	title     string
 	body      string
 	onConfirm func() tea.Msg
+
+	cache    string
+	cacheKey renderKey
 }
 
 // New returns a hidden prompt with default keys and styles.
 func New() Model {
 	return Model{
 		KeyMap: DefaultKeyMap(),
-		Styles: DefaultStyles(true),
+		styles: DefaultStyles(true),
 	}
 }
 
@@ -53,6 +56,16 @@ func (m Model) IsVisible() bool { return m.visible }
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+}
+
+// Styles returns the prompt's current styles.
+func (m Model) Styles() Styles { return m.styles }
+
+// SetStyles replaces the prompt's styles. Styles are not part of the
+// render key, so this is what drops the cached frame.
+func (m *Model) SetStyles(s Styles) {
+	m.styles = s
+	m.cache, m.cacheKey = "", renderKey{}
 }
 
 // Init implements tea.Model. The prompt has no startup work.
