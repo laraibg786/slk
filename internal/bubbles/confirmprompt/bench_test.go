@@ -31,9 +31,7 @@ func themedStyles() Styles {
 }
 
 func benchModel(body string) Model {
-	m := New()
-	m.SetStyles(themedStyles())
-	m.SetSize(120, 40)
+	m := New(WithStyles(themedStyles()), WithWidth(120))
 	m.Open("Delete message?", body, nil)
 	return m
 }
@@ -87,8 +85,7 @@ func BenchmarkViewUncachedTruncatedBody(b *testing.B) {
 // outer Render then has to measure. Isolates what the host's theme
 // wiring costs.
 func BenchmarkViewUncachedWithoutBaseANSI(b *testing.B) {
-	m := New()
-	m.SetSize(120, 40)
+	m := New(WithWidth(120))
 	bodies := [2]string{benchBody, benchBody + "!"}
 
 	b.ReportAllocs()

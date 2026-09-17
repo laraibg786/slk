@@ -13,7 +13,6 @@ type Model struct {
 
 	styles    Styles
 	width     int
-	height    int
 	visible   bool
 	title     string
 	body      string
@@ -23,12 +22,29 @@ type Model struct {
 	cacheKey renderKey
 }
 
+// Option configures a Model at construction. Anything that also changes
+// at runtime has a setter as well.
+type Option func(*Model)
+
+// WithStyles sets the prompt's styles.
+func WithStyles(s Styles) Option { return func(m *Model) { m.styles = s } }
+
+// WithKeyMap sets the prompt's key bindings.
+func WithKeyMap(k KeyMap) Option { return func(m *Model) { m.KeyMap = k } }
+
+// WithWidth sets the terminal width the box is sized against.
+func WithWidth(width int) Option { return func(m *Model) { m.width = width } }
+
 // New returns a hidden prompt with default keys and styles.
-func New() Model {
-	return Model{
+func New(opts ...Option) Model {
+	m := Model{
 		KeyMap: DefaultKeyMap(),
 		styles: DefaultStyles(true),
 	}
+	for _, opt := range opts {
+		opt(&m)
+	}
+	return m
 }
 
 // Open shows the prompt. body is rendered as a single-line preview of the
@@ -52,11 +68,10 @@ func (m *Model) Close() {
 // IsVisible reports whether the prompt is showing.
 func (m Model) IsVisible() bool { return m.visible }
 
-// SetSize records the terminal dimensions the box is sized against.
-func (m *Model) SetSize(width, height int) {
-	m.width = width
-	m.height = height
-}
+// SetWidth records the terminal width the box is sized against. The box
+// height follows its content, and centering it is the caller's job, so
+// the terminal height is not the model's business.
+func (m *Model) SetWidth(width int) { m.width = width }
 
 // Styles returns the prompt's current styles.
 func (m Model) Styles() Styles { return m.styles }
