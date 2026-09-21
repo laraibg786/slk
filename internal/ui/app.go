@@ -175,6 +175,12 @@ type App struct {
 	activeChannelID string
 	activeTeamID    string // workspace whose data is currently loaded into the side panels
 
+	// composeDisabled is true once a MessagingCapability probe confirms
+	// the active channel can't receive a message. Reset on every
+	// channel switch; assumed false until the (async) probe says
+	// otherwise.
+	composeDisabled bool
+
 	// windowTitle is the cached terminal-window-title string, recomputed
 	// by notifyReadStateChanged on every read-state mutation and read by
 	// View() into tea.View.WindowTitle. Bubbletea's renderer emits OSC 2

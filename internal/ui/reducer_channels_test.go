@@ -3,6 +3,8 @@ package ui
 import (
 	"testing"
 
+	"github.com/gammons/slk/internal/core"
+	"github.com/gammons/slk/internal/ids"
 	"github.com/gammons/slk/internal/ui/messages"
 )
 
@@ -122,5 +124,58 @@ func TestMessagesAroundLoaded_TargetMissingToasts(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected ToastMsg when TargetTS is missing from the loaded window")
+	}
+}
+
+// Selecting an app/bot DM fires a MessagingCapability probe.
+func TestChannelSelected_ProbesMessagingCapabilityForAppDMs(t *testing.T) {
+	app := NewApp()
+	var probed ids.ChannelID
+	setChannelFuncsForTest(app, core.ChannelServiceFuncs{
+		MessagingCapability: func(channelID ids.ChannelID) core.Cmd {
+			probed = channelID
+			return nil
+		},
+	})
+
+	app.Update(ChannelSelectedMsg{ID: "D1", Name: "some-bot", Type: "app"})
+
+	if probed != "D1" {
+		t.Errorf("MessagingCapability probed channel = %q, want %q", probed, "D1")
+	}
+}
+
+// A stale composeDisabled must not leak into the next channel.
+func TestChannelSelected_ResetsComposeDisabled(t *testing.T) {
+	app := NewApp()
+	app.composeDisabled = true
+
+	app.Update(ChannelSelectedMsg{ID: "C1", Name: "general", Type: "channel"})
+
+	if app.composeDisabled {
+		t.Error("composeDisabled not reset to false on channel switch")
+	}
+}
+
+func TestChannelMessagingCapability_DisablesComposeForActiveChannel(t *testing.T) {
+	app := NewApp()
+	app.activeChannelID = "D1"
+
+	app.Update(ChannelMessagingCapabilityMsg{ChannelID: "D1", CanSend: false})
+
+	if !app.composeDisabled {
+		t.Error("composeDisabled not set for a CanSend:false result on the active channel")
+	}
+}
+
+func TestChannelMessagingCapability_CanSendTrueLeavesComposeEnabled(t *testing.T) {
+	app := NewApp()
+	app.activeChannelID = "D1"
+	app.composeDisabled = true // simulate a stale disable from an earlier probe
+
+	app.Update(ChannelMessagingCapabilityMsg{ChannelID: "D1", CanSend: true})
+
+	if app.composeDisabled {
+		t.Error("composeDisabled left true after a CanSend:true result for the active channel")
 	}
 }
