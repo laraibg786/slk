@@ -1990,7 +1990,7 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 ) {
 	// Render as a muted system notice, not a chat bubble -- Slack's
 	// author for these is a system bot, indistinguishable otherwise.
-	if msg.Subtype == "channel_join" || msg.Subtype == "channel_leave" {
+	if IsSystemNoticeSubtype(msg.Subtype) {
 		contentWidth := width - 4
 		if contentWidth < 20 {
 			contentWidth = 20
@@ -2001,7 +2001,12 @@ func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string,
 			UserGroups:   m.userGroups,
 			Width:        contentWidth,
 		})
-		notice := styles.Timestamp.Render(WordWrap(msg.Timestamp+"  "+body, contentWidth))
+		// Stripped to plain text before styling: RenderSlackMarkdownWith
+		// re-applies TextPrimary after a mention/link span, and every
+		// channel_join/leave message starts with one -- left unstripped,
+		// only the timestamp would actually render muted.
+		plain := ansi.Strip(body)
+		notice := styles.Timestamp.Render(WordWrap(msg.Timestamp+"  "+plain, contentWidth))
 		return notice, nil, nil, nil, nil
 	}
 

@@ -1895,6 +1895,23 @@ func (m *Model) blockkitContext(msg messages.MessageItem, userNames, channelName
 }
 
 func (m *Model) renderThreadMessage(msg messages.MessageItem, width int, userNames map[string]string, channelNames map[string]string, isSelected bool) (string, []func(io.Writer) error, []reactionEntryHit) {
+	// Mirrors messages.Model.renderMessagePlain's system-notice branch.
+	if messages.IsSystemNoticeSubtype(msg.Subtype) {
+		contentWidth := width - 4
+		if contentWidth < 20 {
+			contentWidth = 20
+		}
+		body := messages.RenderSlackMarkdownWith(messages.MessageTextSource(msg), messages.RenderSlackMarkdownOpts{
+			UserNames:    userNames,
+			ChannelNames: channelNames,
+			UserGroups:   m.userGroups,
+			Width:        contentWidth,
+		})
+		plain := ansi.Strip(body)
+		notice := styles.Timestamp.Render(messages.WordWrap(msg.Timestamp+"  "+plain, contentWidth))
+		return notice, nil, nil
+	}
+
 	line := styles.Username(msg.UserID, m.coloredUsernames).Render(msg.UserName) + messages.AuthorStatusSuffix(m.userStatuses, msg.UserID, time.Now()) + lipgloss.NewStyle().Background(styles.Background).Render("  ") + styles.Timestamp.Render(msg.Timestamp)
 
 	contentWidth := width - 4
