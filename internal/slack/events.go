@@ -380,13 +380,16 @@ func dispatchWebSocketEvent(data []byte, handler EventHandler) {
 			return
 		}
 		switch msg.SubType {
-		case "", "bot_message", "thread_broadcast", "file_share":
+		case "", "bot_message", "thread_broadcast", "file_share", "channel_join", "channel_leave", "group_join", "group_leave":
 			// thread_broadcast is a thread reply that the author also
 			// posted to the main channel; render it like a regular
 			// message but with the subtype preserved so the UI can
 			// label it. file_share is a regular message that has one
 			// or more files attached (Slack's V2 upload flow uses
-			// this subtype).
+			// this subtype). channel_join/channel_leave (public
+			// channels) and group_join/group_leave (private
+			// channels/mpims) render as system notices, keyed off
+			// subtype.
 			debuglog.WS("message: channel=%s user=%s ts=%s subtype=%q thread_ts=%s files=%d",
 				msg.Channel, msg.User, msg.TS, msg.SubType, msg.ThreadTS, len(msg.Files))
 			handler.OnMessage(msg.Channel, msg.User, msg.TS, msg.Text, msg.ThreadTS, msg.SubType, false, msg.Files, msg.Blocks, msg.Attachments, msg.BotID, msg.Username)
