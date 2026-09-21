@@ -1282,7 +1282,7 @@ func (a *App) copyMessageOfSelected() tea.Cmd {
 		return nil
 	}
 
-	text := messages.MessageTextSource(msg)
+	text := messages.MessageCopyText(msg)
 	if text == "" {
 		return func() tea.Msg { return ToastMsg{Text: "Message has no text"} }
 	}
@@ -1358,13 +1358,13 @@ func (a *App) openLinksOfSelected() tea.Cmd {
 		if !ok {
 			return nil
 		}
-		text = msg.Text
+		text = messages.MessageCopyText(msg)
 	case PanelThread:
 		reply := a.threadPanel.SelectedReply()
 		if reply == nil {
 			return nil
 		}
-		text = reply.Text
+		text = messages.MessageCopyText(*reply)
 	default:
 		return nil
 	}
