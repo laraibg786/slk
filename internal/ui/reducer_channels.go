@@ -28,6 +28,8 @@
 //	                                add to sidebar + open it.
 //	ChannelJoinFailedMsg          - finder-driven join failed:
 //	                                log warning (toast TBD).
+//	ChannelMessagingCapabilityMsg - app/bot DM send probe landed:
+//	                                disable compose if unsendable.
 //	channelSearchDebounceMsg      - finder typing paused: issue one
 //	                                channels/search for the query
 //	                                the user stopped on.
@@ -79,6 +81,14 @@ var reduceChannels reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 			cmd = tea.Batch(cmd, nav)
 		}
 		return cmd, true
+
+	case ChannelMessagingCapabilityMsg:
+		// Drop a result for a channel the user has since navigated
+		// away from.
+		if m.ChannelID == a.activeChannelID {
+			a.composeDisabled = !m.CanSend
+		}
+		return nil, true
 
 	case MessagesLoadedMsg:
 		// Distinguish the three cases of the fetcher's nil-vs-[]
@@ -280,8 +290,9 @@ var reduceChannels reducerFunc = func(a *App, msg tea.Msg) (tea.Cmd, bool) {
 // — can reuse it. Selection-only semantics (nav-history push,
 // RecordVisit, thread close, tiered cache load, mark-read) stay in
 // the reducer.
-func (a *App) retargetActiveChannel(id, name, chType string) {
+func (a *App) retargetActiveChannel(id, name, chType string) tea.Cmd {
 	a.activeChannelID = id
+	a.composeDisabled = false   // assume sendable until a probe (below) says otherwise
 	a.typingOut.ResetThrottle() // reset typing throttle for new channel
 	a.compose.SetChannel(name)
 	a.compose.SetActiveChannel(id)
@@ -309,6 +320,11 @@ func (a *App) retargetActiveChannel(id, name, chType string) {
 	// Safe for the selection path too — all three tiers set syncing
 	// explicitly right after this retarget runs.
 	a.statusbar.SetSyncing(false)
+	// Only an app/bot DM can reject a send outright.
+	if chType == "app" {
+		return teaCmd(a.channels.MessagingCapability(ids.ChannelID(id)))
+	}
+	return nil
 }
 
 // reduceChannelSelected handles ChannelSelectedMsg. Extracted from
@@ -379,7 +395,7 @@ func reduceChannelSelected(a *App, m ChannelSelectedMsg) (tea.Cmd, bool) {
 	a.compose.CloseMention()
 	a.threadCompose.CloseMention()
 
-	a.retargetActiveChannel(m.ID, m.Name, m.Type)
+	retargetCmd := a.retargetActiveChannel(m.ID, m.Name, m.Type)
 	// Record the applied selection on the focused window so window
 	// focus changes can retarget to it (see internal/ui/windows.go).
 	a.setFocusedWindowChannel(m.ID, m.Name, m.Type)
@@ -412,7 +428,7 @@ func reduceChannelSelected(a *App, m ChannelSelectedMsg) (tea.Cmd, bool) {
 		debuglog.Cache("ChannelSelectedMsg: channel=%s tier=1_fresh", m.ID)
 		tier = "1_fresh"
 		if len(cached) == 0 {
-			return nil, false
+			return retargetCmd, false
 		}
 		channels := a.channels
 		chID := ids.ChannelID(m.ID)
@@ -423,7 +439,7 @@ func reduceChannelSelected(a *App, m ChannelSelectedMsg) (tea.Cmd, bool) {
 		a.selfMarks.record(selfMarkKey{channelID: m.ID, ts: string(latestTS)})
 		// MarkRead produces ChannelMarkedReadMsg, NOT MessagesLoadedMsg,
 		// so no authoritative permalink completion will follow.
-		return func() tea.Msg { return channels.MarkRead(chID, latestTS) }, false
+		return tea.Batch(retargetCmd, func() tea.Msg { return channels.MarkRead(chID, latestTS) }), false
 
 	case len(cached) > 0:
 		// Tier 2: cache exists, verify in background. Covers
@@ -438,7 +454,7 @@ func reduceChannelSelected(a *App, m ChannelSelectedMsg) (tea.Cmd, bool) {
 		a.statusbar.SetSyncing(true)
 		debuglog.Cache("ChannelSelectedMsg: channel=%s tier=2_verify", m.ID)
 		tier = "2_verify"
-		return fetchCmd(), true
+		return tea.Batch(retargetCmd, fetchCmd()), true
 
 	default:
 		// Tier 3: no cache at all (genuine cold-start,
@@ -448,6 +464,6 @@ func reduceChannelSelected(a *App, m ChannelSelectedMsg) (tea.Cmd, bool) {
 		a.statusbar.SetSyncing(false)
 		debuglog.Cache("ChannelSelectedMsg: channel=%s tier=3_spinner", m.ID)
 		tier = "3_spinner"
-		return tea.Batch(spinnerTickCmd(), fetchCmd()), true
+		return tea.Batch(retargetCmd, spinnerTickCmd(), fetchCmd()), true
 	}
 }

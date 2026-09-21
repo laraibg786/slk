@@ -294,6 +294,22 @@ type ViewResponseMetadata struct {
 	NextCursor string `json:"next_cursor"`
 }
 
+// AppHome is conversations.view's `app_home` object, present only for
+// a DM with an app that has a Home tab. MessagesTabEnabled and
+// MessagesTabReadOnlyEnabled are the only signal for whether the app
+// can be sent a chat.postMessage at all; see AppCanReceiveMessages.
+// The rest are modelled because one capture showed them, not because
+// slk consumes them.
+type AppHome struct {
+	AppID                      string `json:"app_id"`
+	AppInstalledTeamID         string `json:"app_installed_team_id"`
+	ConversationID             string `json:"conversation_id"`
+	HomeTabEnabled             bool   `json:"home_tab_enabled"`
+	MessagesTabEnabled         bool   `json:"messages_tab_enabled"`
+	MessagesTabReadOnlyEnabled bool   `json:"messages_tab_read_only_enabled"`
+	HomeViewID                 string `json:"home_view_id"`
+}
+
 // ViewResult is everything one conversations.view call learned.
 //
 // The point of the endpoint is that these sections arrive together:
@@ -354,7 +370,20 @@ type ViewResult struct {
 	// and therefore whether the probe worked or it must fall back.
 	Channel ViewChannel `json:"channel"`
 
+	AppHome *AppHome `json:"app_home"`
+
 	ResponseMetadata ViewResponseMetadata `json:"response_metadata"`
+}
+
+// AppCanReceiveMessages reports whether the opened conversation accepts
+// a chat.postMessage from the user. Always true for a non-app
+// conversation (AppHome nil); for an app DM it is
+// MessagesTabEnabled && !MessagesTabReadOnlyEnabled.
+func (r *ViewResult) AppCanReceiveMessages() bool {
+	if r.AppHome == nil {
+		return true
+	}
+	return r.AppHome.MessagesTabEnabled && !r.AppHome.MessagesTabReadOnlyEnabled
 }
 
 // viewResponse is ViewResult plus the two envelope fields every Slack

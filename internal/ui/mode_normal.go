@@ -55,12 +55,19 @@ func handleNormalMode(a *App, msg tea.KeyMsg) tea.Cmd {
 
 	switch {
 	case key.Matches(msg, a.keys.InsertMode):
-		a.SetMode(ModeInsert)
 		// In the Threads view there is no main compose box -- the
 		// only way to type is into the right-side thread panel's
 		// compose. Force focus there even when the threads list
 		// itself was the focused panel.
-		if a.focusedPanel == PanelThread || (a.view == ViewThreads && a.threadVisible) {
+		toThread := a.focusedPanel == PanelThread || (a.view == ViewThreads && a.threadVisible)
+		// composeDisabled reflects the active CHANNEL's send capability,
+		// not the thread panel's -- a thread reply targets whatever
+		// thread is open, which need not be in that channel.
+		if a.composeDisabled && !toThread {
+			return a.uploadToastCmd("You can't send messages to this app", 2*time.Second)
+		}
+		a.SetMode(ModeInsert)
+		if toThread {
 			a.focusedPanel = PanelThread
 			return a.threadCompose.Focus()
 		}

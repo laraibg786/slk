@@ -30,6 +30,7 @@ import (
 	"github.com/gammons/slk/internal/notify"
 	"github.com/gammons/slk/internal/service"
 	slackclient "github.com/gammons/slk/internal/slack"
+	"github.com/gammons/slk/internal/slack/boot"
 	"github.com/gammons/slk/internal/slackdesktop"
 	"github.com/gammons/slk/internal/slackhttp"
 	"github.com/gammons/slk/internal/text"
@@ -827,6 +828,22 @@ func run() error {
 						UserIDs:     userIDs,
 						RequestID:   requestID,
 					}
+				}
+			},
+			MessagingCapability: func(channelID ids.ChannelID) core.Cmd {
+				wctx := router.Active()
+				if wctx == nil || wctx.Client == nil {
+					return nil
+				}
+				client := wctx.Client
+				chIDStr := string(channelID)
+				return func() core.Msg {
+					view, err := boot.ConversationsView(ctx, client.PostForm, chIDStr)
+					if err != nil {
+						log.Printf("warning: conversations.view for messaging capability %s: %v", chIDStr, err)
+						return ui.ChannelMessagingCapabilityMsg{ChannelID: chIDStr, CanSend: true}
+					}
+					return ui.ChannelMessagingCapabilityMsg{ChannelID: chIDStr, CanSend: view.AppCanReceiveMessages()}
 				}
 			},
 			Fetch: func(channelID ids.ChannelID, channelName string) core.Msg {

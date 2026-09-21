@@ -1020,6 +1020,87 @@ func TestConversationsView_ExposesTheOpenedChannel(t *testing.T) {
 	}
 }
 
+// appHomeViewBody is a real conversations.view response for an app DM,
+// trimmed of the home_view block (irrelevant to AppHome).
+const appHomeViewBody = `{
+	"ok": true,
+	"app_home": {
+		"app_id": "A08SF47R6P4",
+		"app_installed_team_id": "T07TATBEYGH",
+		"conversation_id": "D0AS2R30945",
+		"home_tab_enabled": true,
+		"messages_tab_enabled": true,
+		"messages_tab_read_only_enabled": false,
+		"home_view_id": "V0B4N3V9UAH"
+	},
+	"channel": {
+		"id": "D0AS2R30945",
+		"is_im": true,
+		"user": "U0ARQPS9YPR"
+	}
+}`
+
+func TestConversationsView_DecodesAppHome(t *testing.T) {
+	res, _ := mustView(t, appHomeViewBody, "D0AS2R30945")
+
+	if res.AppHome == nil {
+		t.Fatal("AppHome = nil; want a populated *AppHome for an app DM response")
+	}
+	if got, want := res.AppHome.AppID, "A08SF47R6P4"; got != want {
+		t.Errorf("AppHome.AppID = %q; want %q", got, want)
+	}
+	if got, want := res.AppHome.ConversationID, "D0AS2R30945"; got != want {
+		t.Errorf("AppHome.ConversationID = %q; want %q", got, want)
+	}
+	if !res.AppHome.MessagesTabEnabled {
+		t.Error("AppHome.MessagesTabEnabled = false; want true")
+	}
+	if res.AppHome.MessagesTabReadOnlyEnabled {
+		t.Error("AppHome.MessagesTabReadOnlyEnabled = true; want false")
+	}
+	if !res.AppCanReceiveMessages() {
+		t.Error("AppCanReceiveMessages() = false; want true for an enabled, non-read-only Messages tab")
+	}
+}
+
+// TestConversationsView_AppHomeAbsentForNonAppConversation asserts a
+// regular conversation decodes AppHome as nil, and that nil means
+// "can send".
+func TestConversationsView_AppHomeAbsentForNonAppConversation(t *testing.T) {
+	res, _ := mustView(t, fullViewBody, "C0OPENED99")
+
+	if res.AppHome != nil {
+		t.Errorf("AppHome = %#v; want nil for a conversation with no app_home key", res.AppHome)
+	}
+	if !res.AppCanReceiveMessages() {
+		t.Error("AppCanReceiveMessages() = false; want true when AppHome is nil")
+	}
+}
+
+// TestAppCanReceiveMessages covers the two ways an app conversation
+// blocks a send, independent of JSON decoding.
+func TestAppCanReceiveMessages(t *testing.T) {
+	cases := []struct {
+		name string
+		home *AppHome
+		want bool
+	}{
+		{"nil AppHome (not an app conversation)", nil, true},
+		{"messages tab enabled, not read-only", &AppHome{MessagesTabEnabled: true, MessagesTabReadOnlyEnabled: false}, true},
+		{"messages tab disabled", &AppHome{MessagesTabEnabled: false, MessagesTabReadOnlyEnabled: false}, false},
+		{"messages tab enabled but read-only", &AppHome{MessagesTabEnabled: true, MessagesTabReadOnlyEnabled: true}, false},
+		{"messages tab disabled and read-only", &AppHome{MessagesTabEnabled: false, MessagesTabReadOnlyEnabled: true}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := &ViewResult{AppHome: c.home}
+			if got := r.AppCanReceiveMessages(); got != c.want {
+				t.Errorf("AppCanReceiveMessages() = %v; want %v", got, c.want)
+			}
+		})
+	}
+}
+
 // TestConversationsView_ChannelIDDetectsAnIgnoredChannelParam is the
 // fallback seam, pinned as a caller would use it.
 //

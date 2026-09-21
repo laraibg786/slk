@@ -145,6 +145,25 @@ func TestChannelSelected_ProbesMessagingCapabilityForAppDMs(t *testing.T) {
 	}
 }
 
+func TestChannelSelected_DoesNotProbeNonAppChannels(t *testing.T) {
+	app := NewApp()
+	probed := false
+	setChannelFuncsForTest(app, core.ChannelServiceFuncs{
+		MessagingCapability: func(channelID ids.ChannelID) core.Cmd {
+			probed = true
+			return nil
+		},
+	})
+
+	for _, typ := range []string{"channel", "dm", "group_dm", "private"} {
+		app.Update(ChannelSelectedMsg{ID: "C1", Name: "general", Type: typ})
+	}
+
+	if probed {
+		t.Error("MessagingCapability probed a non-app channel type")
+	}
+}
+
 // A stale composeDisabled must not leak into the next channel.
 func TestChannelSelected_ResetsComposeDisabled(t *testing.T) {
 	app := NewApp()
@@ -165,6 +184,17 @@ func TestChannelMessagingCapability_DisablesComposeForActiveChannel(t *testing.T
 
 	if !app.composeDisabled {
 		t.Error("composeDisabled not set for a CanSend:false result on the active channel")
+	}
+}
+
+func TestChannelMessagingCapability_IgnoresStaleChannel(t *testing.T) {
+	app := NewApp()
+	app.activeChannelID = "D2"
+
+	app.Update(ChannelMessagingCapabilityMsg{ChannelID: "D1", CanSend: false})
+
+	if app.composeDisabled {
+		t.Error("composeDisabled set from a result for a channel that is no longer active")
 	}
 }
 
