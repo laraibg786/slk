@@ -538,6 +538,19 @@ func MessageTextSource(msg MessageItem) string {
 	return msg.Text
 }
 
+// IsSystemNoticeSubtype reports whether subtype is a membership-change
+// system message (join/leave), as opposed to an authored chat message.
+// Shared with cmd/slk (unread/mention/notification gating) and
+// internal/ui/thread (render parity) so the subtype list stays in one
+// place.
+func IsSystemNoticeSubtype(subtype string) bool {
+	switch subtype {
+	case "channel_join", "channel_leave", "group_join", "group_leave":
+		return true
+	}
+	return false
+}
+
 // BlocksCarryBody reports whether msg's blocks already render its body,
 // in which case the host adds no row for msg.Text. A non-empty rich_text
 // block is the exception: it renders through MessageTextSource and must
@@ -1975,6 +1988,23 @@ func (m *Model) blockkitContext(msg MessageItem, userNames, channelNames map[str
 func (m *Model) renderMessagePlain(msg MessageItem, width int, avatarStr string, userNames map[string]string, channelNames map[string]string, isSelected bool, stats *entryPerfStats) (
 	content string, flushes []func(io.Writer) error, sixelRows map[int]sixelEntry, hits []entryHit, reactionHits []reactionEntryHit,
 ) {
+	// Render as a muted system notice, not a chat bubble -- Slack's
+	// author for these is a system bot, indistinguishable otherwise.
+	if msg.Subtype == "channel_join" || msg.Subtype == "channel_leave" {
+		contentWidth := width - 4
+		if contentWidth < 20 {
+			contentWidth = 20
+		}
+		body := RenderSlackMarkdownWith(MessageTextSource(msg), RenderSlackMarkdownOpts{
+			UserNames:    userNames,
+			ChannelNames: channelNames,
+			UserGroups:   m.userGroups,
+			Width:        contentWidth,
+		})
+		notice := styles.Timestamp.Render(WordWrap(msg.Timestamp+"  "+body, contentWidth))
+		return notice, nil, nil, nil, nil
+	}
+
 	line := styles.Username(msg.UserID, m.coloredUsernames).Render(msg.UserName) + AuthorStatusSuffix(m.userStatuses, msg.UserID, time.Now()) + lipgloss.NewStyle().Background(styles.Background).Render("  ") + styles.Timestamp.Render(msg.Timestamp)
 
 	// If we have an avatar, reserve space on the left for it
