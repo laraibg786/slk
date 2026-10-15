@@ -1322,9 +1322,9 @@ func (m *Model) rebuildFilter() {
 	// people/app/group conversations. Within each block (and other sections):
 	//   1. Channels with ChannelOrder > 0 come first, sorted ascending
 	//      (from SectionDef "<pattern>:<N>" suffixes; config-mode only).
-	//   2. Channels with ChannelOrder == 0 follow, in input order
-	//      (preserves Slack-provided order in Slack mode, and
-	//      bootstrap-order in config mode without ":N" suffixes).
+	//   2. Channels with ChannelOrder == 0 follow, alphabetically by
+	//      displayed name (case and accent insensitive), then in input
+	//      order for equal names.
 	// Snapshot star identities once per rebuild, not inside the comparator.
 	// Names are presentation only: a custom section named Starred is ordinary.
 	stars := make(map[string]bool)
@@ -1339,6 +1339,11 @@ func (m *Model) rebuildFilter() {
 	rank := make(map[string]int, len(sectionOrder))
 	for i, name := range sectionOrder {
 		rank[name] = i
+	}
+	// Fold each name once per rebuild, not inside the comparator.
+	names := make(map[int]string, len(m.filtered))
+	for _, i := range m.filtered {
+		names[i] = text.Fold(m.items[i].Name)
 	}
 	sort.SliceStable(m.filtered, func(a, b int) bool {
 		ia, ib := m.filtered[a], m.filtered[b]
@@ -1356,13 +1361,16 @@ func (m *Model) rebuildFilter() {
 		}
 		// Within a section: annotated (ChannelOrder > 0) before
 		// un-annotated; among annotated, lower wins; among
-		// un-annotated, preserve input order via stable sort.
+		// un-annotated, alphabetical, ties keep input order (stable sort).
 		oa, ob := m.items[ia].ChannelOrder, m.items[ib].ChannelOrder
 		if (oa > 0) != (ob > 0) {
 			return oa > 0
 		}
 		if oa != ob {
 			return oa < ob
+		}
+		if oa == 0 && names[ia] != names[ib] {
+			return names[ia] < names[ib]
 		}
 		return ia < ib
 	})

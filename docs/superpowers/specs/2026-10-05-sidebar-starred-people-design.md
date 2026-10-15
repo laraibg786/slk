@@ -2,8 +2,8 @@
 
 Treat Slack channel and IM stars as conversation membership; ignore
 message/file/comment stars. Use one real Slack Starred section, channels first
-(public/private), then people/app/group conversation rows, stably preserving
-order within each block. Custom sections named Starred remain unchanged.
+(public/private), then people/app/group conversation rows. Each block is
+sorted by displayed name, with explicit `:N` order first. Custom sections named Starred remain unchanged.
 
 Recover accessible closed starred one-to-one DMs with existing boot metadata
 or read-only conversation info, never conversations.open or invented user rows.

@@ -152,7 +152,7 @@ Each entry in a section's `channels` list may carry an optional `:<N>`
 suffix where `N` is a non-negative integer. Channels matched by an
 annotated pattern sort ahead of channels matched by un-annotated
 patterns; among annotated channels, lower `N` wins; un-annotated
-channels keep the order Slack returned them in.
+channels are sorted by name, ignoring case and accents.
 
 ```toml
 [sections.Engineering]

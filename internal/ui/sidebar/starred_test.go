@@ -128,7 +128,7 @@ func TestStarredRenderingNavigationAndRefresh(t *testing.T) {
 			order = append(order, m.items[m.filtered[n.fi]].ID)
 		}
 	}
-	if !reflect.DeepEqual(order, []string{"C2", "C1", "D2", "D1"}) {
+	if !reflect.DeepEqual(order, []string{"C1", "C2", "D2", "D1"}) {
 		t.Fatalf("refresh order = %v", order)
 	}
 	// An explicit peer priority now moves D1 within its block; selection
