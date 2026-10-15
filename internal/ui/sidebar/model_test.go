@@ -31,9 +31,9 @@ func TestSidebarView(t *testing.T) {
 
 func TestSidebarNavigation(t *testing.T) {
 	channels := []ChannelItem{
-		{ID: "C1", Name: "general", Type: "channel"},
-		{ID: "C2", Name: "random", Type: "channel"},
-		{ID: "C3", Name: "eng", Type: "channel"},
+		{ID: "C1", Name: "alpha", Type: "channel"},
+		{ID: "C2", Name: "bravo", Type: "channel"},
+		{ID: "C3", Name: "charlie", Type: "channel"},
 	}
 
 	m := New(channels)
@@ -81,8 +81,8 @@ func TestThreadsItem_DefaultSelected(t *testing.T) {
 
 func TestThreadsItem_MoveDownLeavesIt(t *testing.T) {
 	m := New([]ChannelItem{
-		{ID: "C1", Name: "general", Type: "channel"},
-		{ID: "C2", Name: "design", Type: "channel"},
+		{ID: "C1", Name: "design", Type: "channel"},
+		{ID: "C2", Name: "general", Type: "channel"},
 	})
 	m.ToggleCollapse("Channels")
 	m.MoveDown() // Activity

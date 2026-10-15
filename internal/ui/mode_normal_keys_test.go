@@ -87,15 +87,16 @@ func normalOpts() []testOpt {
 //
 // Section is set explicitly on every item: the staleness filter in
 // rebuildFilter (sidebar/model.go:985) exempts sectioned items
-// outright (staleness.go:49-51), so the walk order is the input order
-// and cannot drift with the clock.
+// outright (staleness.go:49-51), and the names sort alphabetically in
+// input order, so the walk order is the input order and cannot drift
+// with the clock.
 func unreadOpts() []testOpt {
 	return []testOpt{
 		withChannels(
-			sidebar.ChannelItem{ID: "C1", Name: "general", Type: "channel", Section: "Eng"},
-			sidebar.ChannelItem{ID: "C2", Name: "random", Type: "channel", Section: "Eng"},
-			sidebar.ChannelItem{ID: "C3", Name: "design", Type: "channel", Section: "Eng"},
-			sidebar.ChannelItem{ID: "C4", Name: "ops", Type: "channel", Section: "Eng"},
+			sidebar.ChannelItem{ID: "C1", Name: "alpha", Type: "channel", Section: "Eng"},
+			sidebar.ChannelItem{ID: "C2", Name: "bravo", Type: "channel", Section: "Eng"},
+			sidebar.ChannelItem{ID: "C3", Name: "charlie", Type: "channel", Section: "Eng"},
+			sidebar.ChannelItem{ID: "C4", Name: "delta", Type: "channel", Section: "Eng"},
 		),
 		withMessages(normalMessages()...),
 		withActiveChannel("C1"),
@@ -1889,7 +1890,7 @@ func TestNormalModeKeys(t *testing.T) {
 				if !ok {
 					t.Fatalf("cmd() = %#v, want ChannelSelectedMsg", cmd())
 				}
-				want := ChannelSelectedMsg{ID: "C2", Name: "random", Type: "channel"}
+				want := ChannelSelectedMsg{ID: "C2", Name: "bravo", Type: "channel"}
 				if msg != want {
 					t.Errorf("cmd() = %+v, want %+v", msg, want)
 				}
@@ -1914,7 +1915,7 @@ func TestNormalModeKeys(t *testing.T) {
 				if !ok {
 					t.Fatalf("cmd() = %#v, want ChannelSelectedMsg", cmd())
 				}
-				want := ChannelSelectedMsg{ID: "C4", Name: "ops", Type: "channel"}
+				want := ChannelSelectedMsg{ID: "C4", Name: "delta", Type: "channel"}
 				if msg != want {
 					t.Errorf("cmd() = %+v, want %+v", msg, want)
 				}

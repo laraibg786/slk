@@ -9,14 +9,14 @@ import (
 	"github.com/gammons/slk/internal/core"
 )
 
-// These fixtures deliberately interleave conversation types and use names
-// whose alphabetical order differs from Slack's order.
+// These fixtures deliberately interleave conversation types; their names
+// are alphabetical in input order, so only the block grouping reorders them.
 func starredItems() []ChannelItem {
 	return []ChannelItem{
-		{ID: "D1", Name: "Zoe", Type: "dm", DMUserID: "U1", Section: "ST"},
-		{ID: "C1", Name: "zebra", Type: "channel", Section: "ST"},
-		{ID: "D2", Name: "Alice", Type: "dm", DMUserID: "U2", Section: "ST"},
-		{ID: "C2", Name: "alpha", Type: "private", Section: "ST"},
+		{ID: "D1", Name: "Ann", Type: "dm", DMUserID: "U1", Section: "ST"},
+		{ID: "C1", Name: "bravo", Type: "channel", Section: "ST"},
+		{ID: "D2", Name: "Cara", Type: "dm", DMUserID: "U2", Section: "ST"},
+		{ID: "C2", Name: "delta", Type: "private", Section: "ST"},
 	}
 }
 
