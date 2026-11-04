@@ -3,8 +3,8 @@ package compose
 import (
 	"testing"
 
+	"github.com/gammons/slk/internal/bubbles/mentionpicker"
 	"github.com/gammons/slk/internal/ui/channelpicker"
-	"github.com/gammons/slk/internal/ui/mentionpicker"
 )
 
 func editModel() Model {

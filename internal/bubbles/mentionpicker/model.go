@@ -7,8 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/gammons/slk/internal/bubbles/chrome"
 	"github.com/gammons/slk/internal/text"
-	"github.com/gammons/slk/internal/ui/messages"
-	"github.com/gammons/slk/internal/ui/styles"
 )
 
 var _ chrome.Dialog = (*Model)(nil)
@@ -51,17 +49,50 @@ var specialMentions = []User{
 	{ID: "special:everyone", DisplayName: "everyone", Username: "everyone", InChannel: true},
 }
 
+// Styles is everything the picker draws with. The composer maps the theme
+// onto it and pushes it at construction and on every theme change.
+type Styles struct {
+	// Chrome is the shared popup styling (box, rows, marker).
+	Chrome chrome.Styles
+	// Name styles a row's label; the selected row is also bold.
+	Name lipgloss.Style
+	// Muted styles the label of a not-in-channel row at rest and every
+	// row's "(not in channel)" / "(ext)" suffix.
+	Muted lipgloss.Style
+}
+
+// Option configures a Model at construction.
+type Option func(*Model)
+
+// WithStyles sets the initial styles.
+func WithStyles(s Styles) Option { return func(m *Model) { m.styles = s } }
+
+// WithWidth sets the popup width.
+func WithWidth(w int) Option { return func(m *Model) { m.width = w } }
+
 type Model struct {
 	users    []User
 	filtered []User
 	query    string
 	selected int
 	visible  bool
+	styles   Styles
+	width    int
 }
 
-func New() Model {
-	return Model{}
+func New(opts ...Option) Model {
+	m := Model{}
+	for _, o := range opts {
+		o(&m)
+	}
+	return m
 }
+
+// SetStyles replaces the picker's styles.
+func (m *Model) SetStyles(s Styles) { m.styles = s }
+
+// SetWidth sets the popup width the composer allots.
+func (m *Model) SetWidth(w int) { m.width = w }
 
 func (m *Model) SetUsers(users []User) {
 	m.users = users
@@ -199,11 +230,13 @@ func (m *Model) filter() {
 	m.filtered = results
 }
 
-func (m *Model) View(width int) string {
+// View renders the popup at the width set by SetWidth/WithWidth, or ""
+// when the picker is hidden or has no matches.
+func (m *Model) View() string {
 	if !m.visible || len(m.filtered) == 0 {
 		return ""
 	}
-	s := messages.ChromeStyles()
+	s := m.styles.Chrome
 
 	var rows []string
 	for i, u := range m.filtered {
@@ -211,11 +244,10 @@ func (m *Model) View(width int) string {
 
 		// Name color: muted for not-in-channel rows at rest;
 		// upgraded to TextPrimary when selected (per spec).
-		nameColor := styles.TextPrimary
+		nameStyle := m.styles.Name
 		if !u.InChannel && !selected {
-			nameColor = styles.TextMuted
+			nameStyle = m.styles.Muted
 		}
-		nameStyle := lipgloss.NewStyle().Foreground(nameColor)
 		if selected {
 			nameStyle = nameStyle.Bold(true)
 		}
@@ -239,11 +271,11 @@ func (m *Model) View(width int) string {
 			suffix = " (ext)"
 		}
 		if suffix != "" {
-			row += lipgloss.NewStyle().Foreground(styles.TextMuted).Render(suffix)
+			row += m.styles.Muted.Render(suffix)
 		}
 
 		rows = append(rows, row)
 	}
 
-	return chrome.Popup(s, rows, width)
+	return chrome.Popup(s, rows, m.width)
 }

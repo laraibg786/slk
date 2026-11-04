@@ -9,11 +9,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/gammons/slk/internal/bubbles/linkpicker"
+	"github.com/gammons/slk/internal/bubbles/mentionpicker"
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/ui/channelpicker"
 	"github.com/gammons/slk/internal/ui/help"
 	"github.com/gammons/slk/internal/ui/marks"
-	"github.com/gammons/slk/internal/ui/mentionpicker"
 	"github.com/gammons/slk/internal/ui/newmessagepicker"
 	"github.com/gammons/slk/internal/ui/reactionsview"
 	"github.com/gammons/slk/internal/ui/searchresults"
