@@ -4,7 +4,53 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 )
+
+func testStyles(fg string) Styles {
+	st := lipgloss.NewStyle().Foreground(lipgloss.Color(fg))
+	return Styles{Name: st, Muted: st}
+}
+
+func TestViewEmptyWhenHiddenOrNoMatches(t *testing.T) {
+	m := New(WithStyles(testStyles("#ff0000")), WithWidth(30))
+	m.SetUsers([]User{{ID: "U1", DisplayName: "alice", InChannel: true}})
+	if m.View() != "" {
+		t.Error("hidden picker should render empty")
+	}
+	m.Open()
+	if m.View() == "" {
+		t.Error("open picker with matches should render")
+	}
+	m.SetQuery("zzz")
+	if m.View() != "" {
+		t.Error("picker with no matches should render empty")
+	}
+}
+
+func TestSetStylesChangesOutput(t *testing.T) {
+	m := New(WithStyles(testStyles("#ff0000")), WithWidth(30))
+	m.SetUsers([]User{{ID: "U1", DisplayName: "alice", InChannel: true}})
+	m.Open()
+	before := m.View()
+	m.SetStyles(testStyles("#00ff00"))
+	if m.View() == before {
+		t.Error("SetStyles did not change the rendered output")
+	}
+}
+
+func TestWidthIsRespected(t *testing.T) {
+	m := New(WithWidth(20))
+	m.SetUsers([]User{{ID: "U1", DisplayName: "alice", InChannel: true}})
+	m.Open()
+	narrow := m.View()
+	m.SetWidth(40)
+	wide := m.View()
+	if lipgloss.Width(wide) <= lipgloss.Width(narrow) {
+		t.Errorf("width 40 (%d) not wider than width 20 (%d)", lipgloss.Width(wide), lipgloss.Width(narrow))
+	}
+}
 
 func TestFilterByDisplayNamePrefix(t *testing.T) {
 	m := New()
@@ -222,7 +268,8 @@ func TestViewNoEmptyParensForRegularUser(t *testing.T) {
 	m := New()
 	m.SetUsers([]User{{ID: "U1", DisplayName: "jane.doe", InChannel: true}})
 	m.Open()
-	out := m.View(40)
+	m.SetWidth(40)
+	out := m.View()
 	if strings.Contains(out, "()") {
 		t.Errorf("view contains empty parens: %q", out)
 	}
@@ -235,7 +282,8 @@ func TestViewKeepsParensForSpecialMentions(t *testing.T) {
 	m := New()
 	m.SetUsers(nil)
 	m.Open()
-	out := m.View(40)
+	m.SetWidth(40)
+	out := m.View()
 	for _, want := range []string{"(here)", "(channel)", "(everyone)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q: %q", want, out)
@@ -249,7 +297,8 @@ func TestViewExternalSuffix(t *testing.T) {
 		{ID: "U1", DisplayName: "jenny.kim", InChannel: true, IsExternal: true},
 	})
 	m.Open()
-	out := m.View(60)
+	m.SetWidth(60)
+	out := m.View()
 	if !strings.Contains(out, "(ext)") {
 		t.Errorf("expected (ext) suffix: %q", out)
 	}
@@ -261,7 +310,8 @@ func TestViewNotInChannelSuffix(t *testing.T) {
 		{ID: "U1", DisplayName: "jordan.lee", InChannel: false},
 	})
 	m.Open()
-	out := m.View(60)
+	m.SetWidth(60)
+	out := m.View()
 	if !strings.Contains(out, "(not in channel)") {
 		t.Errorf("expected (not in channel) suffix: %q", out)
 	}

@@ -12,11 +12,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/gammons/slk/internal/bubbles/mentionpicker"
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/emoji"
 	"github.com/gammons/slk/internal/ui/channelpicker"
 	"github.com/gammons/slk/internal/ui/emojipicker"
-	"github.com/gammons/slk/internal/ui/mentionpicker"
+	"github.com/gammons/slk/internal/ui/messages"
 	"github.com/gammons/slk/internal/ui/styles"
 	"github.com/gammons/slk/internal/usergroups"
 )
@@ -197,6 +198,8 @@ func New(channelName string) Model {
 		input:       ta,
 		channelName: channelName,
 		drafts:      make(map[draftKey]draft),
+		mentionPicker: mentionpicker.New(
+			mentionpicker.WithStyles(mentionPickerStyles())),
 	}
 }
 
@@ -218,6 +221,7 @@ func (m *Model) RefreshStyles() {
 	s.Focused.Placeholder = bg.Foreground(styles.TextMuted)
 	s.Blurred.Placeholder = bg.Foreground(styles.TextMuted)
 	m.input.SetStyles(s)
+	m.mentionPicker.SetStyles(mentionPickerStyles())
 	m.dirty()
 }
 
@@ -1311,7 +1315,18 @@ func (m Model) MentionPickerView(width int) string {
 	if !m.mentionActive {
 		return ""
 	}
-	return m.mentionPicker.View(width)
+	// m is a copy; the width is the popup width the caller allots this frame.
+	m.mentionPicker.SetWidth(width)
+	return m.mentionPicker.View()
+}
+
+// mentionPickerStyles maps the current theme onto the mention picker.
+func mentionPickerStyles() mentionpicker.Styles {
+	return mentionpicker.Styles{
+		Chrome: messages.ChromeStyles(),
+		Name:   lipgloss.NewStyle().Foreground(styles.TextPrimary),
+		Muted:  lipgloss.NewStyle().Foreground(styles.TextMuted),
+	}
 }
 
 // SetEmojiEntries provides the searchable emoji list (built-ins + workspace

@@ -7,9 +7,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"golang.design/x/clipboard"
 
+	"github.com/gammons/slk/internal/bubbles/mentionpicker"
 	"github.com/gammons/slk/internal/core"
 	"github.com/gammons/slk/internal/ui/compose"
-	"github.com/gammons/slk/internal/ui/mentionpicker"
 	"github.com/gammons/slk/internal/ui/messages"
 	"github.com/gammons/slk/internal/ui/sidebar"
 )
