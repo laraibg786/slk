@@ -168,8 +168,10 @@ func (m *Model) Select() *MentionResult {
 
 // rankedUser pairs a candidate with its match rank so the sort can put
 // stronger matches first within a membership tier.
+// It holds the index into the user list rather than a copy of the user, so
+// ranking 500 candidates moves 16-byte entries, not 500 User structs.
 type rankedUser struct {
-	user User
+	idx  int
 	rank matchRank
 }
 
@@ -177,15 +179,16 @@ type rankedUser struct {
 // sort.Slice is unstable, so the ID tie-break keeps the dropdown from
 // reshuffling between identical keystrokes when two entries share a
 // display name.
-func sortRanked(s []rankedUser) {
+func sortRanked(users []User, s []rankedUser) {
 	sort.Slice(s, func(i, j int) bool {
 		if s[i].rank != s[j].rank {
 			return s[i].rank < s[j].rank
 		}
-		if s[i].user.DisplayName != s[j].user.DisplayName {
-			return s[i].user.DisplayName < s[j].user.DisplayName
+		a, b := users[s[i].idx], users[s[j].idx]
+		if a.DisplayName != b.DisplayName {
+			return a.DisplayName < b.DisplayName
 		}
-		return s[i].user.ID < s[j].user.ID
+		return a.ID < b.ID
 	})
 }
 
@@ -200,28 +203,30 @@ func (m *Model) filter() {
 			specials = append(specials, u)
 		}
 	}
-	for _, u := range m.users {
+	for i, u := range m.users {
 		r := rankUser(u, q, sq)
 		if r == rankNone {
 			continue
 		}
 		if u.InChannel {
-			inCh = append(inCh, rankedUser{user: u, rank: r})
+			inCh = append(inCh, rankedUser{idx: i, rank: r})
 		} else {
-			notInCh = append(notInCh, rankedUser{user: u, rank: r})
+			notInCh = append(notInCh, rankedUser{idx: i, rank: r})
 		}
 	}
 
-	sortRanked(inCh)
-	sortRanked(notInCh)
+	sortRanked(m.users, inCh)
+	sortRanked(m.users, notInCh)
 
-	results := make([]User, 0, len(specials)+len(inCh)+len(notInCh))
+	results := make([]User, 0, min(MaxVisible, len(specials)+len(inCh)+len(notInCh)))
 	results = append(results, specials...)
-	for _, r := range inCh {
-		results = append(results, r.user)
-	}
-	for _, r := range notInCh {
-		results = append(results, r.user)
+	for _, tier := range [][]rankedUser{inCh, notInCh} {
+		for _, r := range tier {
+			if len(results) == MaxVisible {
+				break
+			}
+			results = append(results, m.users[r.idx])
+		}
 	}
 
 	if len(results) > MaxVisible {
